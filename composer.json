@@ -1,0 +1,19 @@
+{
+  "name": "robinjanke/gitlab-ci-auto-builder",
+  "description": "",
+  "authors": [
+    {
+      "name": "Robin Janke"
+    }
+  ],
+  "minimum-stability": "dev",
+  "require": {
+    "php": ">=7.0.0",
+    "guzzlehttp/guzzle": "~6.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "RobinJanke\\GitlabCiAutoBuilder\\": "src/Classes/"
+    }
+  }
+}
