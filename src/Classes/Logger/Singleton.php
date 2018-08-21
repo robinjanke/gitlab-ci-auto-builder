@@ -1,6 +1,6 @@
-<?php
+<?php /** @noinspection ALL */
 
-namespace RobinJanke\GitlabCiAutoBuilder\Models;
+namespace RobinJanke\GitlabCiAutoBuilder\Logger;
 
 class Singleton
 {
