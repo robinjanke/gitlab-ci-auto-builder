@@ -2,16 +2,20 @@
 
 namespace RobinJanke\GitlabCiAutoBuilder\Services;
 
-use McDev\GitlabCiBuilder\Models\Gitlab\Project;
+use RobinJanke\GitlabCiAutoBuilder\Models\Gitlab\Project;
 
 class SortService
 {
 
+    /**
+     * @param array $projects
+     * @return array
+     */
     public function setChildProjects(array $projects)
     {
-        /** @var \McDev\GitlabCiBuilder\Models\Gitlab\Project $project */
+        /** @var Project $project */
         foreach ($projects as $key => $project) {
-            /** @var \McDev\GitlabCiBuilder\Models\Gitlab\Project $projectInside */
+            /** @var Project $childProject */
             foreach ($projects as $childProject) {
                 if ($project->getDockerPath() == $childProject->getDockerFrom()) {
                     $project->addChildProject($childProject);
@@ -24,6 +28,10 @@ class SortService
         return $projects;
     }
 
+    /**
+     * @param array $projects
+     * @return array
+     */
     public function removeNonExternalProjects(array $projects)
     {
 
@@ -38,6 +46,10 @@ class SortService
 
     }
 
+    /**
+     * @param array $projects
+     * @return array
+     */
     public function removeProjectsWithoutDockerFrom(array $projects)
     {
         /** @var Project $project */

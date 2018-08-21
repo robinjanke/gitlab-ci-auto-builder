@@ -2,21 +2,20 @@
 
 namespace RobinJanke\GitlabCiAutoBuilder\Services;
 
-require_once __DIR__ . '/../../../vendor/autoload.php';
-
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use RobinJanke\GitlabCiAutoBuilder\Logger\Logger;
+use RobinJanke\GitlabCiAutoBuilder\Logger\LogLevel;
 use RobinJanke\GitlabCiAutoBuilder\Models\Gitlab\Group;
 use RobinJanke\GitlabCiAutoBuilder\Models\Gitlab\Project;
-use RobinJanke\GitlabCiAutoBuilder\Models\Log\Logger;
 
 class GitlabApiService
 {
 
-    protected $token = "";
+    protected $gitlabToken = "";
     protected $gitlabUrl = "";
     protected $gitlabApiUrl = "";
-    protected $registryUrl = "";
+    protected $dockerRegistryUrl = "";
     protected $baseGroupIdentifier = "";
 
     protected $branchesToRunPipeline = [];
@@ -36,50 +35,19 @@ class GitlabApiService
 
     /**
      * GitlabApiService constructor.
-     * @param string $token
-     * @param string $gitlabUrl
-     * @param string $gitlabApiUrl
-     * @param string $registryUrl
-     * @param string $baseGroupIdentifier
-     * @param array $branchesToRunPipeline
-     * @param array $branchesToCheckForDockerfile
-     * @param string $pathToDockerfile
-     * @param bool $triggerChildrenIfPipelineFailed
-     * @param int $maxWaitTimeForPipeline
-     * @param bool $handleNotExistingBranchesAsSuccessfully
-     * @param int $checkTime
+     * @param array $config
      */
-    public function __construct(
-        $token,
-        $gitlabUrl,
-        $gitlabApiUrl,
-        $registryUrl,
-        $baseGroupIdentifier,
-        $branchesToRunPipeline = [],
-        $branchesToCheckForDockerfile = [],
-        $pathToDockerfile = "",
-        $triggerChildrenIfPipelineFailed = true,
-        $maxWaitTimeForPipeline = 600,
-        $handleNotExistingBranchesAsSuccessfully = true,
-        $checkTime = 10
-    )
+    public function __construct($config)
     {
-        $this->handleNotExistingBranchesAsSuccessfully = $handleNotExistingBranchesAsSuccessfully;
-        $this->baseGroupIdentifier = $baseGroupIdentifier;
-        $this->checkTime = $checkTime;
-        $this->maxWaitTimeForPipeline = $maxWaitTimeForPipeline;
-        $this->triggerChildrenIfPipelineFailed = $triggerChildrenIfPipelineFailed;
-        $this->token = $token;
-        $this->gitlabUrl = $gitlabUrl;
-        $this->gitlabApiUrl = $gitlabApiUrl;
-        $this->registryUrl = $registryUrl;
-        $this->branchesToRunPipeline = $branchesToRunPipeline;
-        $this->branchesToCheckForDockerfile = $branchesToCheckForDockerfile;
-        if ($pathToDockerfile != "") {
-            $this->pathToDockerfile = $pathToDockerfile;
+
+        foreach ($config as $key => $value) {
+            if (property_exists($this, $key)) {
+                $this->$key = $value;
+            }
         }
+
         $this->requestClient = new Client(['http_errors' => false]);
-        $this->authParams = ["PRIVATE-TOKEN" => $token];
+        $this->authParams = ["PRIVATE-TOKEN" => $this->gitlabToken];
         $this->logger = Logger::instance();
     }
 
@@ -90,7 +58,8 @@ class GitlabApiService
     public function getAllProjects()
     {
 
-        $res = $this->requestClient->request(
+
+        $request = $this->requestClient->request(
             'GET',
             $this->gitlabApiUrl . "groups/" . $this->baseGroupIdentifier . "/subgroups",
             [
@@ -99,12 +68,19 @@ class GitlabApiService
         );
 
         $groups = [];
-        $groupsRaw = json_decode($res->getBody()->getContents());
+
+        if ($request->getStatusCode() != 200) {
+            $this->logger->log(LogLevel::CRITICAL, "Cannot load projects of main group with identifier #" . $this->baseGroupIdentifier);
+            $this->logger->log(LogLevel::DEBUG, "Message from gitlab: " . $request->getBody()->getContents());
+            return [];
+        }
+
+        $groupsRaw = json_decode($request->getBody()->getContents());
         foreach ($groupsRaw as $groupRaw) {
             $group = new Group();
             $group->setName($groupRaw->name);
             $group->setId($groupRaw->id);
-            $this->logger->logMessageStdout("Added group " . $group->getName(), 2);
+            $this->logger->log(LogLevel::DEBUG, "Added group " . $group->getName());
             $groups[] = $group;
         }
 
@@ -140,7 +116,7 @@ class GitlabApiService
             $group = new Group();
             $group->setName($groupRaw->name);
             $group->setId($groupRaw->id);
-            $this->logger->logMessageStdout("Added subgroup " . $group->getName(), 2);
+            $this->logger->log(LogLevel::DEBUG, "Added subgroup " . $group->getName());
             $subGroups[] = $group;
         }
 
@@ -176,7 +152,7 @@ class GitlabApiService
                 $project = new Project();
                 $path = $projectRaw->web_url;
                 $fullpath = str_replace($this->gitlabUrl, "", $path);
-                $dockerPath = str_replace($this->gitlabUrl, $this->registryUrl, $path);
+                $dockerPath = str_replace($this->gitlabUrl, $this->dockerRegistryUrl, $path);
                 $project->setDockerPath($dockerPath);
                 $project->setName($projectRaw->name);
                 $project->setFullPath($fullpath);
@@ -184,7 +160,7 @@ class GitlabApiService
                 $this->projects[] = $project;
             }
         } else {
-            $this->logger->logMessageStdout( "Failed loading projects of group " . $group->getName(), 1);
+            $this->logger->log(LogLevel::ALERT, "Failed loading projects of group " . $group->getName());
         }
     }
 
@@ -208,6 +184,7 @@ class GitlabApiService
             );
 
             if ($res->getStatusCode() == 200) {
+
                 $content = $res->getBody()->getContents();
 
                 if (substr($content, 0, 4) == "FROM") {
@@ -224,7 +201,7 @@ class GitlabApiService
 
             /** @var string $from */
             if ($from != "") {
-                if (strpos($from, $this->registryUrl) !== false) {
+                if (strpos($from, $this->dockerRegistryUrl) !== false) {
                     $project->setExternal(false);
                 }
                 $project->setDockerFrom($from);
@@ -291,7 +268,7 @@ class GitlabApiService
     function runPipeline(Project $project)
     {
 
-        $this->logger->logMessageStdout( "Processing pipeline for project: " . $project->getFullPath(), 1);
+        $this->logger->log(LogLevel::INFO, "Processing pipeline for project: " . $project->getFullPath());
 
         /** @var Project $project */
         /** @var string $branch */
@@ -304,19 +281,19 @@ class GitlabApiService
         }
 
 
-        $this->logger->logMessageStdout( "Successfully: " . $successCount . "/" . $branchesCount, 1);
+        $this->logger->log(LogLevel::INFO, "Successfully: " . $successCount . "/" . $branchesCount);
 
         if ($project->getChildProjects() != null) {
             if ($successCount == $branchesCount) {
-                $this->logger->logMessageStdout( "All pipelines was successfully. Now processing child projects of " . $project->getFullPath() . " ...", 1);
+                $this->logger->log(LogLevel::INFO, "All pipelines was successfully. Now processing child projects of " . $project->getFullPath() . " ...");
                 foreach ($project->getChildProjects() as $childProject) {
                     $this->runPipeline($childProject);
                 }
             } else {
                 if ($this->triggerChildrenIfPipelineFailed == true) {
-                    $this->logger->logMessageStdout( "Not all pipelines where successfully. But triggerChildrenIfPipelineFailed is enabled so now processing child projects of " . $project->getFullPath() . " ...", 1);
+                    $this->logger->log(LogLevel::INFO, "Not all pipelines where successfully. But triggerChildrenIfPipelineFailed is enabled so now processing child projects of " . $project->getFullPath() . " ...");
                 } else {
-                    $this->logger->logMessageStdout( "Not all pipelines where successfully. triggerChildrenIfPipelineFailed is disabled so now stopping processing child projects of " . $project->getFullPath() . " ...", 1);
+                    $this->logger->log(LogLevel::WARNING, "Not all pipelines where successfully. triggerChildrenIfPipelineFailed is disabled so now stopping processing child projects of " . $project->getFullPath() . " ...");
                 }
 
             }
@@ -327,9 +304,8 @@ class GitlabApiService
     /**
      * @param array $branches
      * @param Project $project
-     * @param int $checkTime
      * @return int
-     * @throws GuzzleException
+     * @throws \GuzzleHttp\Exception\GuzzleException
      */
     protected function loopBranchesForPipelines(array $branches, Project $project)
     {
@@ -342,7 +318,7 @@ class GitlabApiService
                     $successCount += 1;
                 }
             } else {
-                $this->logger->logMessageStdout( "Branch " . $branch . " for project " . $project->getFullPath() . " not exists!", 1);
+                $this->logger->log(LogLevel::WARNING, "Branch " . $branch . " for project " . $project->getFullPath() . " not exist!");
                 if ($this->handleNotExistingBranchesAsSuccessfully == true) {
                     $successCount += 1;
                 }
@@ -355,8 +331,7 @@ class GitlabApiService
     /**
      * @param string $branch
      * @param Project $project
-     * @return str
-     * ing
+     * @return string
      * @throws GuzzleException
      */
     protected function triggerPipelineByBranch(string $branch, Project $project)
@@ -373,7 +348,7 @@ class GitlabApiService
         $response = json_decode($res->getBody()->getContents());
         $pipelineIdentifier = $response->id;
 
-        $this->logger->logMessageStdout( "Waiting for the pipeline #" . $pipelineIdentifier . " to complete...", 1);
+        $this->logger->log(LogLevel::INFO, "Waiting for the pipeline #" . $pipelineIdentifier . " to complete...");
 
         $runningTime = 0;
         $running = true;
@@ -381,14 +356,14 @@ class GitlabApiService
 
             $runningTime += $this->checkTime;
             if ($runningTime >= $this->maxWaitTimeForPipeline) {
-                $this->logger->logMessageStdout( "The pipeline needed more than" . $this->maxWaitTimeForPipeline . " seconds to complete. Skipping...", 1);
+                $this->logger->log(LogLevel::WARNING, "The pipeline needed more than" . $this->maxWaitTimeForPipeline . " seconds to complete. Skipping...");
                 $status = "Running to long";
                 break;
             }
 
             sleep($this->checkTime);
 
-            $res = $this->requestClient->request(
+            $request = $this->requestClient->request(
                 'GET',
                 $this->gitlabApiUrl . "projects/" . $project->getId() . "/pipelines/" . $pipelineIdentifier,
                 [
@@ -396,7 +371,12 @@ class GitlabApiService
                 ]
             );
 
-            $response = json_decode($res->getBody()->getContents());
+            if ($request->getStatusCode() != 200) {
+                $this->logger->log(LogLevel::CRITICAL, "Cant acccess pipelines of project " . $project->getFullPath());
+                $status = "HTTP Error";
+            }
+
+            $response = json_decode($request->getBody()->getContents());
             $status = $response->status;
 
             if ($status != "running") {
@@ -406,9 +386,9 @@ class GitlabApiService
         }
 
         if ($status == "success") {
-            $this->logger->logMessageStdout( "Pipeline #" . $pipelineIdentifier . " done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds!", 1);
+            $this->logger->log(LogLevel::INFO, "Pipeline #" . $pipelineIdentifier . " done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds!");
         } else {
-            $this->logger->logMessageStdout( "Pipeline for branch " . $branch . " is done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds but has the status " . $status . "!", 1);
+            $this->logger->log(LogLevel::INFO, "Pipeline for branch " . $branch . " is done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds but has the status " . $status . "!");
         }
 
         return $status;
