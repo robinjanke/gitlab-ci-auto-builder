@@ -1,6 +1,7 @@
 {
   "name": "robinjanke/gitlab-ci-auto-builder",
   "description": "",
+  "license": "MIT",
   "authors": [
     {
       "name": "Robin Janke"
