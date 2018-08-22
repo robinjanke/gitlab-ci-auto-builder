@@ -74,25 +74,25 @@ class Builder
     {
 
         $this->logger->log(LogLevel::INFO, "Started application");
-        $this->logger->log(LogLevel::INFO, "Loading all projects...");
+        $this->logger->log(LogLevel::INFO, "Loading project details");
         $projects = $this->gitlabApiService->getAllProjects();
 
         /** @var Models\Gitlab\Project $project */
         foreach ($projects as $key => $project) {
-            $this->logger->log(LogLevel::DEBUG, "Loading branches for project " . $project->getFullPath() . "...");
+            $this->logger->log(LogLevel::DEBUG, "Loading branches for project " . $project->getFullPath());
             $projects[$key] = $this->gitlabApiService->setBranches($project);
 
-            $this->logger->log(LogLevel::DEBUG, "Loading docker details for project " . $project->getFullPath() . "...");
+            $this->logger->log(LogLevel::DEBUG, "Loading docker details for project " . $project->getFullPath());
             $projects[$key] = $this->gitlabApiService->setDockerDetails($project);
         }
 
-        $this->logger->log(LogLevel::DEBUG, "Loading child projects...");
+        $this->logger->log(LogLevel::DEBUG, "Loading child projects");
         $projects = $this->sortService->setChildProjects($projects);
 
-        $this->logger->log(LogLevel::DEBUG, "Removing projects without docker base image from array...");
+        $this->logger->log(LogLevel::DEBUG, "Removing projects without docker base image from array");
         $projects = $this->sortService->removeProjectsWithoutDockerFrom($projects);
 
-        $this->logger->log(LogLevel::DEBUG, "Removing projects with internal docker base image from array...");
+        $this->logger->log(LogLevel::DEBUG, "Removing projects with internal docker base image from array");
         $projects = $this->sortService->removeNonExternalProjects($projects);
 
         $this->logger->log(LogLevel::DEBUG, "Starting processing pipelines");

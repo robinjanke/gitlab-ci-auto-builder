@@ -205,8 +205,13 @@ class GitlabApiService
                     $project->setExternal(false);
                 }
                 $project->setDockerFrom($from);
+                $this->logger->log(LogLevel::DEBUG, "Found a docker from line at branch " . $branch . " for project " . $project->getFullPath());
                 break;
             }
+        }
+
+        if ($project->getDockerFrom() == "") {
+            $this->logger->log(LogLevel::DEBUG, "Cannot find any docker from line for project " . $project->getFullPath(). " .");
         }
 
         return $project;
@@ -219,8 +224,7 @@ class GitlabApiService
      */
     public function setDockerDetails(Project $project)
     {
-        // Docker base image (from)
-        if (empty($this->branchesToCheckForDockerfile)) {
+        if ($this->branchesToCheckForDockerfile == []) {
             $project = $this->getDockerFrom($project->getBranches(), $project);
         } else {
             $project = $this->getDockerFrom($this->branchesToCheckForDockerfile, $project);
@@ -268,11 +272,11 @@ class GitlabApiService
     function runPipeline(Project $project)
     {
 
-        $this->logger->log(LogLevel::INFO, "Processing pipeline for project: " . $project->getFullPath());
+        $this->logger->log(LogLevel::INFO, "Processings pipeline for project: " . $project->getFullPath());
 
         /** @var Project $project */
         /** @var string $branch */
-        if (empty($this->branchesToRunPipeline)) {
+        if ($this->branchesToRunPipeline == []) {
             $successCount = $this->loopBranchesForPipelines($project->getBranches(), $project);
             $branchesCount = count($project->getBranches());
         } else {
@@ -285,15 +289,15 @@ class GitlabApiService
 
         if ($project->getChildProjects() != null) {
             if ($successCount == $branchesCount) {
-                $this->logger->log(LogLevel::INFO, "All pipelines was successfully. Now processing child projects of " . $project->getFullPath() . " ...");
+                $this->logger->log(LogLevel::INFO, "All pipelines was successfully. Now processing child projects of " . $project->getFullPath());
                 foreach ($project->getChildProjects() as $childProject) {
                     $this->runPipeline($childProject);
                 }
             } else {
                 if ($this->triggerChildrenIfPipelineFailed == true) {
-                    $this->logger->log(LogLevel::INFO, "Not all pipelines where successfully. But triggerChildrenIfPipelineFailed is enabled so now processing child projects of " . $project->getFullPath() . " ...");
+                    $this->logger->log(LogLevel::INFO, "Not all pipelines where successfully. But triggerChildrenIfPipelineFailed is enabled so now processing child projects of " . $project->getFullPath());
                 } else {
-                    $this->logger->log(LogLevel::WARNING, "Not all pipelines where successfully. triggerChildrenIfPipelineFailed is disabled so now stopping processing child projects of " . $project->getFullPath() . " ...");
+                    $this->logger->log(LogLevel::WARNING, "Not all pipelines where successfully. triggerChildrenIfPipelineFailed is disabled so now stopping processing child projects of " . $project->getFullPath());
                 }
 
             }
@@ -318,7 +322,7 @@ class GitlabApiService
                     $successCount += 1;
                 }
             } else {
-                $this->logger->log(LogLevel::WARNING, "Branch " . $branch . " for project " . $project->getFullPath() . " not exist!");
+                $this->logger->log(LogLevel::WARNING, "Branch " . $branch . " for project " . $project->getFullPath() . " not exist, not processing pipeline");
                 if ($this->handleNotExistingBranchesAsSuccessfully == true) {
                     $successCount += 1;
                 }
@@ -348,7 +352,7 @@ class GitlabApiService
         $response = json_decode($res->getBody()->getContents());
         $pipelineIdentifier = $response->id;
 
-        $this->logger->log(LogLevel::INFO, "Waiting for the pipeline #" . $pipelineIdentifier . " to complete...");
+        $this->logger->log(LogLevel::INFO, "Started pipeline #" . $pipelineIdentifier . " on branch " . $branch . " for project " . $project->getFullPath());
 
         $runningTime = 0;
         $running = true;
@@ -356,7 +360,7 @@ class GitlabApiService
 
             $runningTime += $this->checkTime;
             if ($runningTime >= $this->maxWaitTimeForPipeline) {
-                $this->logger->log(LogLevel::WARNING, "The pipeline needed more than" . $this->maxWaitTimeForPipeline . " seconds to complete. Skipping...");
+                $this->logger->log(LogLevel::WARNING, "The pipeline needed more than " . $this->maxWaitTimeForPipeline . " seconds to complete. Skipping");
                 $status = "Running to long";
                 break;
             }
@@ -372,7 +376,7 @@ class GitlabApiService
             );
 
             if ($request->getStatusCode() != 200) {
-                $this->logger->log(LogLevel::CRITICAL, "Cant acccess pipelines of project " . $project->getFullPath());
+                $this->logger->log(LogLevel::CRITICAL, "Cant access pipelines of project " . $project->getFullPath());
                 $status = "HTTP Error";
             }
 
@@ -386,9 +390,9 @@ class GitlabApiService
         }
 
         if ($status == "success") {
-            $this->logger->log(LogLevel::INFO, "Pipeline #" . $pipelineIdentifier . " done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds!");
+            $this->logger->log(LogLevel::INFO, "Pipeline #" . $pipelineIdentifier . " done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds");
         } else {
-            $this->logger->log(LogLevel::INFO, "Pipeline for branch " . $branch . " is done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds but has the status " . $status . "!");
+            $this->logger->log(LogLevel::INFO, "Pipeline for branch " . $branch . " is done in " . ($runningTime - $this->checkTime) . " - " . $runningTime . " seconds but has the status " . $status);
         }
 
         return $status;
