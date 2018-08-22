@@ -34,6 +34,6 @@ There should be a main group in which all projects and subgroups exist.
      'logLevel' => 7,
      'dateFormat' => 'Y-m-d H:i:s',
      'checkTime' => 10
-    ];);
+    ]);
     
     $gitlabBuilder->buildAll();
