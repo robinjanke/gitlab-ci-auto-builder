@@ -7,7 +7,7 @@ There should be a main group in which all projects and subgroups exist.
 
 ### Installation
 
-1.  Run `composer install`
+1.  Run `composer require robinjanke/gitlab-ci-auto-builder dev-master`
 2.  Create gitlab account for pipelines with required permissions (optional)
 3.  Get gitlab api token (e.g. https://gitlab.com/profile/applications)
 4.  Create a base group group for all subprojects and get the id under 
@@ -16,27 +16,24 @@ There should be a main group in which all projects and subgroups exist.
 ### Usage example
     
     namespace testProgram;
-    use RobinJanke\GitlabCiAutoBuilder\Builder;
-    
     require_once __DIR__ . '/vendor/autoload.php';
+    use RobinJanke\GitlabCiAutoBuilder\Builder; 
     
-    $config = [
-        'gitlabUrl' => 'https://gitlab.com/',
-        'gitlabToken' => '',
-        'gitlabApiUrl' => 'https://gitlab.com/api/v4/',
-        'dockerRegistryUrl' => 'registry.gitlab.com/',
-        'baseGroupIdentifier' => '',
+    $gitlabBuilder = new Builder([
+     'gitlabUrl' => 'https://gitlab.com/',
+     'gitlabToken' => 'XXX',
+     'gitlabApiUrl' => 'https://gitlab.com/api/v4/',
+     'dockerRegistryUrl' => 'registry.gitlab.com/',
+     'baseGroupIdentifier' => 'XXX',
+     'branchesToRunPipeline' => ['release', 'master'],
+     'branchesToCheckForDockerfile' => ['release', 'master', 'beta', 'dev'],
+     'pathToDockerfile' => '/Dockerfile',
+     'triggerChildrenIfPipelineFailed' => true,
+     'maxWaitTimeForPipeline' => 600,
+     'handleNotExistingBranchesAsSuccessfully' => true,
+     'logLevel' => 7,
+     'dateFormat' => 'Y-m-d H:i:s',
+     'checkTime' => 10
+    ];);
     
-        'branchesToRunPipeline' => ['release', 'master'],
-        'branchesToCheckForDockerfile' => ['release', 'master', 'beta', 'dev'],
-        'pathToDockerfile' => '/Dockerfile',
-        'triggerChildrenIfPipelineFailed' => true,
-        'maxWaitTimeForPipeline' => 600,
-        'handleNotExistingBranchesAsSuccessfully' => true,
-        'logLevel' => 7,
-        'dateFormat' => 'Y-m-d H:i:s',
-        'checkTime' => 10
-    ];
-    
-    $gitlabBuilder = new Builder($config);
     $gitlabBuilder->buildAll();
